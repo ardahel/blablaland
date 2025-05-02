@@ -1,129 +1,214 @@
-const socket = io();
+// CLIENT.JS FINAL PROPRE
 
-// Joueur local
-let localPlayer = {
-    id: null,
-    pseudo: null,
+const socket = io("https://blablaland-server.onrender.com");
+
+let player = {
     x: 400,
     y: 100,
+    size: 45,
     money: 0,
+    pseudo: "Non connecté",
     level: 1
 };
 
-// Autres joueurs
 let players = {};
+let keys = {};
+let currentMap = 0;
 
-function renderPlayers() {
-    const ctx = document.getElementById("game").getContext("2d");
+const maps = [
+    "https://i.imgur.com/VYOacW2.png",
+    "https://i.imgur.com/uIQqqHn.png"
+];
 
-    Object.values(players).forEach(player => {
+const mapImage = new Image();
+mapImage.src = maps[currentMap];
+
+const diamondImage = new Image();
+diamondImage.src = "https://i.imgur.com/fnuCYnE.png";
+
+const brokenDiamondImage = new Image();
+brokenDiamondImage.src = "https://i.imgur.com/IVY4vuE.png";
+
+const playerIdle = new Image();
+playerIdle.src = "https://i.imgur.com/jKbjaOa.png";
+
+const playerWalk1 = new Image();
+playerWalk1.src = "https://i.imgur.com/ioZGV8S.png";
+
+const playerWalk2 = new Image();
+playerWalk2.src = "https://i.imgur.com/IXTOJpw.png";
+
+let diamonds = [
+    { x: Math.random() * 960, y: 380, collected: false },
+    { x: Math.random() * 960, y: 380, collected: false }
+];
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+setInterval(() => {
+    diamonds.forEach(diamond => {
+        if (diamond.collected) {
+            diamond.x = Math.random() * 960;
+            diamond.collected = false;
+        }
+    });
+}, 5000);
+
+setInterval(() => {
+    player.level++;
+}, 10000);
+
+socket.on('players', (data) => {
+    players = data;
+});
+
+function sendMove() {
+    socket.emit("move", { x: player.x, y: player.y });
+}
+
+function update() {
+    if (keys["ArrowLeft"]) player.x -= 5;
+    if (keys["ArrowRight"]) player.x += 5;
+    if (keys["ArrowUp"]) player.y -= 5;
+    if (keys["ArrowDown"]) player.y += 5;
+
+    if (player.x + player.size > canvas.width) {
+        currentMap = (currentMap + 1) % maps.length;
+        mapImage.src = maps[currentMap];
+        player.x = 0 + player.size;
+    }
+
+    if (player.x - player.size < 0) {
+        currentMap = (currentMap - 1 + maps.length) % maps.length;
+        mapImage.src = maps[currentMap];
+        player.x = canvas.width - player.size;
+    }
+
+    diamonds.forEach(diamond => {
+        let dist = Math.hypot(player.x - diamond.x, player.y - diamond.y);
+        if (dist < 50 && !diamond.collected) {
+            player.money += Math.floor(Math.random() * 101) + 50;
+            diamond.collected = true;
+        }
+    });
+
+    document.getElementById("money").textContent = player.money;
+    document.getElementById("playerMoney").textContent = player.money;
+    document.getElementById("playerLevel").textContent = player.level;
+
+    sendMove();
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(mapImage, 0, 0, canvas.width, canvas.height);
+
+    for (let id in players) {
+        const p = players[id];
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.drawImage(playerIdle, -45, -65, 90, 90);
+        ctx.restore();
         ctx.fillStyle = "black";
         ctx.font = "16px Arial";
         ctx.textAlign = "center";
-        ctx.fillText(player.pseudo, player.x, player.y - 70);
-
-        ctx.fillStyle = "pink";
-        ctx.beginPath();
-        ctx.arc(player.x, player.y, 20, 0, Math.PI * 2);
-        ctx.fill();
-    });
-}
-
-function gameLoop() {
-    const ctx = document.getElementById("game").getContext("2d");
-    ctx.clearRect(0, 0, 960, 540);
-
-    renderPlayers();
-
-    requestAnimationFrame(gameLoop);
-}
-
-requestAnimationFrame(gameLoop);
-
-// Envoi du mouvement
-document.addEventListener("keydown", (e) => {
-    if (!localPlayer.id) return;
-
-    if (e.key === "ArrowLeft") localPlayer.x -= 5;
-    if (e.key === "ArrowRight") localPlayer.x += 5;
-    if (e.key === "ArrowUp") localPlayer.y -= 5;
-    if (e.key === "ArrowDown") localPlayer.y += 5;
-
-    socket.emit("move", {
-        x: localPlayer.x,
-        y: localPlayer.y
-    });
-});
-
-// Gestion des joueurs
-socket.on("players", (serverPlayers) => {
-    players = serverPlayers;
-});
-
-// CHAT
-document.getElementById("sendButton").addEventListener("click", () => {
-    const msg = document.getElementById("chatInput").value.trim();
-    if (msg !== "") {
-        socket.emit("chat", msg);
-        document.getElementById("chatInput").value = "";
+        ctx.fillText(p.pseudo, p.x, p.y - 75);
     }
-});
 
-socket.on("chat", (msg) => {
+    let sprite = playerIdle;
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.drawImage(sprite, -45, -65, 90, 90);
+    ctx.restore();
+
+    ctx.fillStyle = "black";
+    ctx.font = "20px Arial";
+    ctx.fillText(player.pseudo, player.x, player.y - 75);
+
+    diamonds.forEach(diamond => {
+        if (!diamond.collected) ctx.drawImage(diamondImage, diamond.x, diamond.y - 60, 60, 60);
+        else ctx.drawImage(brokenDiamondImage, diamond.x, diamond.y - 60, 60, 60);
+    });
+}
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+loop();
+
+function sendMessage() {
+    const input = document.getElementById("chatInput");
     const messages = document.getElementById("chatMessages");
-    const el = document.createElement("div");
-    el.textContent = msg;
-    messages.appendChild(el);
-    messages.scrollTop = messages.scrollHeight;
-});
 
-// INSCRIPTION
-function register(pseudo, password) {
-    fetch("/register", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pseudo, password })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            alert("Compte créé !");
-        } else {
-            alert("Erreur: " + data.message);
-        }
-    });
+    if (input.value.trim() !== "") {
+        const msg = document.createElement("div");
+        msg.textContent = player.pseudo + ": " + input.value;
+        messages.appendChild(msg);
+        messages.scrollTop = messages.scrollHeight;
+        input.value = "";
+    }
 }
 
-// CONNEXION
-function login(pseudo, password) {
-    fetch("/login", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pseudo, password })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            alert("Connecté !");
-            localPlayer.pseudo = pseudo;
-            localPlayer.id = data.id;
-
-            socket.emit("newPlayer", pseudo);
-        } else {
-            alert("Erreur: " + data.message);
-        }
-    });
+const inventory = document.getElementById("inventory");
+for (let i = 0; i < 24; i++) {
+    const slot = document.createElement("div");
+    slot.classList.add("inventory-slot");
+    inventory.appendChild(slot);
 }
 
-// Boutons Inscription et Connexion
-document.getElementById("registerButton").addEventListener("click", () => {
-    const pseudo = prompt("Pseudo:");
-    const password = prompt("Mot de passe:");
-    register(pseudo, password);
+// ---------------------------
+// Connexion / Inscription
+// ---------------------------
+
+function showForm(type) {
+    const form = document.getElementById("formContainer");
+    form.style.display = "block";
+    document.getElementById("formTitle").innerText = type;
+}
+
+function hideForm() {
+    document.getElementById("formContainer").style.display = "none";
+}
+
+document.querySelector("#formContainer button").addEventListener("click", hideForm);
+
+document.querySelectorAll(".topButtonImg").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+        const type = e.target.getAttribute("data-type");
+        showForm(type);
+    });
 });
 
-document.getElementById("loginButton").addEventListener("click", () => {
-    const pseudo = prompt("Pseudo:");
-    const password = prompt("Mot de passe:");
-    login(pseudo, password);
+document.getElementById("formContainer").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = document.querySelector("#formContainer input[type=text]").value;
+    const password = document.querySelector("#formContainer input[type=password]").value;
+    const type = document.getElementById("formTitle").innerText;
+
+    if (!username || !password) return;
+
+    const url = type === "Connexion" ? "/login" : "/register";
+
+    const res = await fetch("https://blablaland-server.onrender.com" + url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+    });
+
+    if (res.ok) {
+        const result = await res.json();
+        player.pseudo = result.username || username;
+        document.getElementById("playerPseudo").textContent = player.pseudo;
+        hideForm();
+        socket.emit("newPlayer", player.pseudo);
+    } else {
+        alert("Erreur: " + (await res.text()));
+    }
 });
