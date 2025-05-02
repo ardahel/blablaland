@@ -16,10 +16,10 @@ app.use(cors());
 app.use(express.static('public'));
 
 const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'blablaland'
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME
 });
 
 db.connect(err => {
@@ -41,7 +41,7 @@ app.post('/login', (req, res) => {
     db.query("SELECT * FROM users WHERE pseudo = ?", [pseudo], (err, results) => {
         if (err || results.length == 0) return res.sendStatus(401);
         if (!bcrypt.compareSync(password, results[0].password)) return res.sendStatus(401);
-        const token = jwt.sign({ id: results[0].id, pseudo: results[0].pseudo }, 'secret');
+        const token = jwt.sign({ id: results[0].id, pseudo: results[0].pseudo }, process.env.JWT_SECRET);
         res.json({ token });
     });
 });
@@ -70,4 +70,4 @@ io.on('connection', socket => {
     });
 });
 
-server.listen(3000, () => console.log('Server started on http://localhost:3000'));
+server.listen(process.env.PORT || 3000, () => console.log('Server started on port ' + (process.env.PORT || 3000)));
