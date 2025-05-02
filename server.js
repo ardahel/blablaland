@@ -1,61 +1,86 @@
-
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
-const mysql = require('mysql2');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const { Server } = require('socket.io');
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, { cors: { origin: '*' }});
+const io = new Server(server, {
+    cors: {
+        origin: "*"
+    }
+});
 
 app.use(express.json());
 app.use(cors());
-app.use(express.static('public'));
 
-const db = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME
+// MongoDB Connection
+mongoose.connect('mongodb+srv://ardahelblablaland:v4MWa.T_6_vr58q@blablaland.tlhdlvl.mongodb.net/?retryWrites=true&w=majority&appName=blablaland', {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+}).then(() => {
+    console.log("MongoDB connected ✅");
+}).catch(err => {
+    console.error("MongoDB error ❌", err);
 });
 
-db.connect(err => {
-    if (err) throw err;
-    console.log("MySQL connected");
+// User Schema
+const userSchema = new mongoose.Schema({
+    username: { type: String, unique: true },
+    password: String
 });
 
-app.post('/register', (req, res) => {
-    const { pseudo, password } = req.body;
-    const hash = bcrypt.hashSync(password, 10);
-    db.query("INSERT INTO users (pseudo, password) VALUES (?, ?)", [pseudo, hash], (err, result) => {
-        if (err) return res.sendStatus(500);
-        res.json({ success: true });
-    });
+const User = mongoose.model('User', userSchema);
+
+// Routes - Inscription
+app.post("/register", async (req, res) => {
+    const { username, password } = req.body;
+    
+    if (!username || !password) return res.status(400).send("Pseudo et mot de passe requis.");
+
+    const existingUser = await User.findOne({ username });
+    if (existingUser) return res.status(400).send("Pseudo déjà utilisé.");
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ username, password: hashedPassword });
+    
+    await user.save();
+    res.status(201).send("Compte créé !");
 });
 
-app.post('/login', (req, res) => {
-    const { pseudo, password } = req.body;
-    db.query("SELECT * FROM users WHERE pseudo = ?", [pseudo], (err, results) => {
-        if (err || results.length == 0) return res.sendStatus(401);
-        if (!bcrypt.compareSync(password, results[0].password)) return res.sendStatus(401);
-        const token = jwt.sign({ id: results[0].id, pseudo: results[0].pseudo }, process.env.JWT_SECRET);
-        res.json({ token });
-    });
+// Routes - Connexion
+app.post("/login", async (req, res) => {
+    const { username, password } = req.body;
+    
+    const user = await User.findOne({ username });
+    if (!user) return res.status(400).send("Utilisateur introuvable.");
+
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) return res.status(400).send("Mot de passe incorrect.");
+
+    res.status(200).send("Connexion réussie");
 });
 
+// Multijoueur Players Data
 let players = {};
 
 io.on('connection', socket => {
-    console.log('New player connected');
+    console.log("Un joueur s'est connecté.");
 
-    socket.on('newPlayer', pseudo => {
-        players[socket.id] = { pseudo, x: 400, y: 100 };
+    // Nouveau joueur
+    socket.on('newPlayer', (pseudo) => {
+        players[socket.id] = {
+            pseudo: pseudo,
+            x: 400,
+            y: 100
+        };
+
         io.emit('players', players);
     });
 
+    // Déplacement
     socket.on('move', data => {
         if (players[socket.id]) {
             players[socket.id].x = data.x;
@@ -64,10 +89,22 @@ io.on('connection', socket => {
         }
     });
 
+    // Chat global
+    socket.on('chat', message => {
+        if (players[socket.id]) {
+            io.emit('chat', { pseudo: players[socket.id].pseudo, message });
+        }
+    });
+
+    // Déconnexion
     socket.on('disconnect', () => {
         delete players[socket.id];
         io.emit('players', players);
+        console.log("Un joueur s'est déconnecté.");
     });
 });
 
-server.listen(process.env.PORT || 3000, () => console.log('Server started on port ' + (process.env.PORT || 3000)));
+// Serveur ON
+server.listen(process.env.PORT || 3000, () => {
+    console.log("✅ Serveur lancé sur le port " + (process.env.PORT || 3000));
+});
