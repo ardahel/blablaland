@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
+const path = require('path');
 
 // Setup Express and HTTP server
 const app = express();
@@ -32,6 +33,9 @@ const userSchema = new mongoose.Schema({
 });
 
 const User = mongoose.model("User", userSchema);
+
+// Serve static files (HTML / Client.js / CSS etc)
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Routes
 app.post('/register', async (req, res) => {
@@ -63,7 +67,6 @@ app.post('/login', async (req, res) => {
 let players = {};
 
 io.on('connection', (socket) => {
-
     console.log("New user connected:", socket.id);
 
     // Player joins
