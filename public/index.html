@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Blablaland Prototype - Perso animé + Interface complète + Connexion</title>
+    <style>
+        body {
+            margin: 0;
+            background: url('https://i.imgur.com/SJ4R9Sj.png') no-repeat center center fixed;
+            background-size: cover;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            flex-direction: column;
+            font-family: sans-serif;
+        }
+        #topbar {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .topButtonImg {
+            width: 120px;
+            cursor: pointer;
+        }
+        #formContainer {
+            display: none;
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        #formContainer input {
+            display: block;
+            margin: 10px 0;
+            padding: 5px;
+            width: 200px;
+        }
+        #container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            background: #000;
+            display: block;
+            width: 960px;
+            height: 540px;
+            border: 10px solid white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #interface {
+            width: 960px;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .section {
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            width: 30%;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+        #chatMessages {
+            height: 140px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.1);
+            padding: 5px;
+            text-align: left;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        #chatInput {
+            width: 90%;
+            padding: 5px;
+            margin-bottom: 5px;
+        }
+        #inventory {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 5px;
+            justify-items: center;
+            padding: 10px;
+            background: rgba(0,0,0,0.05);
+            margin-top: 5px;
+        }
+        .inventory-slot {
+            width: 40px;
+            height: 40px;
+            background: rgba(255,255,255,0.6);
+            border: 1px solid rgba(0,0,0,0.2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="topbar">
+    <img src="https://i.imgur.com/P8ChU6A.png" class="topButtonImg" onclick="showForm('Connexion')">
+    <img src="https://i.imgur.com/i0AGXLh.png" class="topButtonImg" onclick="showForm('Inscription')">
+</div>
+
+<div id="formContainer">
+    <h3 id="formTitle">Connexion</h3>
+    <input type="text" placeholder="Pseudo">
+    <input type="password" placeholder="Mot de passe">
+    <button onclick="hideForm()">Fermer</button>
+</div>
+
+<div id="container">
+    <canvas id="game" width="960" height="540"></canvas>
+</div>
+
+<div id="ui">
+    <p>Argent: <span id="money">0</span> 💰</p>
+</div>
+
+<div id="interface">
+    <div class="section">
+        <div id="chatMessages"></div>
+        <input type="text" id="chatInput" placeholder="Ecrire un message...">
+        <button onclick="sendMessage()">Envoyer</button>
+    </div>
+    <div class="section">
+        <p>Inventaire</p>
+        <div id="inventory"></div>
+    </div>
+    <div class="section">
+        <p>Info Joueur</p>
+        <p>Pseudo: <span id="playerPseudo">Awardo</span></p>
+        <p>Argent: <span id="playerMoney">0</span> 💰</p>
+        <p>LVL: <span id="playerLevel">1</span></p>
+    </div>
+</div>
+
+<script>
+function showForm(type) {
+    const form = document.getElementById('formContainer');
+    form.style.display = 'block';
+    document.getElementById('formTitle').innerText = type;
+}
+
+function hideForm() {
+    document.getElementById('formContainer').style.display = 'none';
+}
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const maps = [
+    "https://i.imgur.com/VYOacW2.png",
+    "https://i.imgur.com/uIQqqHn.png"
+];
+
+let currentMap = 0;
+const mapImage = new Image();
+mapImage.src = maps[currentMap];
+
+const diamondImage = new Image();
+diamondImage.src = "https://i.imgur.com/fnuCYnE.png";
+
+const brokenDiamondImage = new Image();
+brokenDiamondImage.src = "https://i.imgur.com/IVY4vuE.png";
+
+const playerIdle = new Image();
+playerIdle.src = "https://i.imgur.com/jKbjaOa.png";
+
+const playerWalk1 = new Image();
+playerWalk1.src = "https://i.imgur.com/ioZGV8S.png";
+
+const playerWalk2 = new Image();
+playerWalk2.src = "https://i.imgur.com/IXTOJpw.png";
+
+let player = {
+    x: canvas.width / 2,
+    y: 120,
+    size: 45,
+    money: 0,
+    velocityX: 0,
+    velocityY: 0,
+    onGround: false,
+    pseudo: "Awardo",
+    walking: false,
+    frameTimer: 0,
+    frameIndex: 0,
+    facing: "right",
+    level: 1
+};
+
+let gravity = 0.5;
+let friction = 0.8;
+let jumpPower = -10;
+
+let platforms = [
+    {x: 0, y: 380, width: canvas.width, height: canvas.height - 380}
+];
+
+let diamonds = [
+    { x: Math.random() * canvas.width, y: 380, collected: false },
+    { x: Math.random() * canvas.width, y: 380, collected: false }
+];
+
+let keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+setInterval(() => {
+    diamonds.forEach(diamond => {
+        if (diamond.collected) {
+            diamond.x = Math.random() * canvas.width;
+            diamond.y = 380;
+            diamond.collected = false;
+        }
+    });
+}, 5000);
+
+setInterval(() => {
+    player.level++;
+}, 10000);
+
+function update() {
+    player.walking = false;
+
+    if (keys["ArrowLeft"]) {
+        player.velocityX = -5;
+        player.walking = true;
+        player.facing = "left";
+    }
+    if (keys["ArrowRight"]) {
+        player.velocityX = 5;
+        player.walking = true;
+        player.facing = "right";
+    }
+
+    if (keys["ArrowUp"] && player.onGround) {
+        player.velocityY = jumpPower;
+        player.onGround = false;
+    }
+
+    player.velocityY += gravity;
+    player.onGround = false;
+
+    player.x += player.velocityX;
+    player.y += player.velocityY;
+
+    player.velocityX *= friction;
+
+    platforms.forEach(p => {
+        if (
+            player.x + player.size > p.x &&
+            player.x - player.size < p.x + p.width &&
+            player.y + player.size > p.y &&
+            player.y - player.size < p.y + p.height &&
+            player.velocityY >= 0
+        ) {
+            player.y = p.y - player.size;
+            player.velocityY = 0;
+            player.onGround = true;
+        }
+    });
+
+    if (player.x + player.size > canvas.width) {
+        currentMap = (currentMap + 1) % maps.length;
+        mapImage.src = maps[currentMap];
+        player.x = 0 + player.size;
+    }
+
+    if (player.x - player.size < 0) {
+        currentMap = (currentMap - 1 + maps.length) % maps.length;
+        mapImage.src = maps[currentMap];
+        player.x = canvas.width - player.size;
+    }
+
+    let diamond = diamonds[currentMap];
+    let dist = Math.hypot(player.x - diamond.x, player.y - diamond.y);
+    if (dist < 50 && keys["ArrowDown"] && !diamond.collected) {
+        let gain = Math.floor(Math.random() * 101) + 50;
+        player.money += gain;
+        diamond.collected = true;
+    }
+
+    document.getElementById("playerMoney").textContent = player.money;
+    document.getElementById("playerLevel").textContent = player.level;
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(mapImage, 0, 0, canvas.width, canvas.height);
+
+    let sprite = playerIdle;
+    if (player.walking) {
+        sprite = player.frameIndex === 0 ? playerWalk1 : playerWalk2;
+    }
+
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    if (player.facing === "left") {
+        ctx.scale(-1, 1);
+    }
+    ctx.drawImage(sprite, player.facing === "left" ? -45 : -45, -65, 90, 90);
+    ctx.restore();
+
+    ctx.fillStyle = "black";
+    ctx.font = "20px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(player.pseudo, player.x, player.y - 75);
+
+    let diamond = diamonds[currentMap];
+    if (!diamond.collected) {
+        ctx.drawImage(diamondImage, diamond.x - 30, diamond.y - 60, 60, 60);
+    } else {
+        ctx.drawImage(brokenDiamondImage, diamond.x - 30, diamond.y - 60, 60, 60);
+    }
+
+    document.getElementById("money").textContent = player.money;
+}
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+loop();
+
+function sendMessage() {
+    const input = document.getElementById("chatInput");
+    const messages = document.getElementById("chatMessages");
+    if (input.value.trim() !== "") {
+        const newMessage = document.createElement("div");
+        newMessage.textContent = player.pseudo + ": " + input.value;
+        messages.appendChild(newMessage);
+        messages.scrollTop = messages.scrollHeight;
+        input.value = "";
+    }
+}
+
+const inventory = document.getElementById("inventory");
+for (let i = 0; i < 24; i++) {
+    const slot = document.createElement("div");
+    slot.classList.add("inventory-slot");
+    inventory.appendChild(slot);
+}
+</script>
+</body>
+</html>
