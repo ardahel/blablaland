@@ -15,27 +15,37 @@ const User = mongoose.model("User", userSchema);
 router.post("/register", async (req, res) => {
     const { username, password } = req.body;
 
-    const exists = await User.findOne({ username });
-    if (exists) return res.status(400).send("Username already exists");
+    try {
+        const exists = await User.findOne({ username });
+        if (exists) return res.status(400).json({ error: "Username already exists" });
 
-    const hashed = bcrypt.hashSync(password, 10);
-    const newUser = new User({ username, password: hashed });
-    await newUser.save();
+        const hashed = bcrypt.hashSync(password, 10);
+        const newUser = new User({ username, password: hashed });
+        await newUser.save();
 
-    res.send("User registered");
+        res.json({ message: "User registered" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Server error during registration" });
+    }
 });
 
 // LOGIN
 router.post("/login", async (req, res) => {
     const { username, password } = req.body;
 
-    const user = await User.findOne({ username });
-    if (!user) return res.status(400).send("User not found");
+    try {
+        const user = await User.findOne({ username });
+        if (!user) return res.status(400).json({ error: "User not found" });
 
-    const valid = bcrypt.compareSync(password, user.password);
-    if (!valid) return res.status(400).send("Invalid password");
+        const valid = bcrypt.compareSync(password, user.password);
+        if (!valid) return res.status(400).json({ error: "Invalid password" });
 
-    res.send({ username });
+        res.json({ username });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Server error during login" });
+    }
 });
 
 module.exports = router;
