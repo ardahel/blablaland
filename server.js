@@ -18,12 +18,13 @@ const io = new Server(server, {
 // Middleware
 app.use(express.json());
 app.use(cors());
+app.use(express.static("public")); // Serve index.html and client files
 
 // MongoDB Connection
 mongoose.connect('mongodb+srv://ardahelblablaland:v4MWa.T_6_vr58q@blablaland.tlhdlvl.mongodb.net/?retryWrites=true&w=majority&appName=blablaland', {
     useNewUrlParser: true,
     useUnifiedTopology: true,
-}).then(() => console.log("MongoDB Connected"))
+}).then(() => console.log("✅ MongoDB Connected"))
 .catch(err => console.error(err));
 
 // User Schema
@@ -34,10 +35,11 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", userSchema);
 
-// Serve static files (HTML / Client.js / CSS etc)
-app.use(express.static(path.join(__dirname, 'public')));
-
 // Routes
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
     const exists = await User.findOne({ username });
@@ -69,13 +71,11 @@ let players = {};
 io.on('connection', (socket) => {
     console.log("New user connected:", socket.id);
 
-    // Player joins
     socket.on('newPlayer', (pseudo) => {
         players[socket.id] = { pseudo, x: 400, y: 100 };
         io.emit('players', players);
     });
 
-    // Player movement
     socket.on('move', (data) => {
         if (players[socket.id]) {
             players[socket.id].x = data.x;
@@ -84,7 +84,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Player disconnect
     socket.on('disconnect', () => {
         delete players[socket.id];
         io.emit('players', players);
@@ -93,5 +92,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log('Server started on port ' + PORT);
+    console.log('🚀 Server started on port ' + PORT);
 });
