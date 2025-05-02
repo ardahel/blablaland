@@ -1,191 +1,168 @@
-// Configuration de la connexion socket.io
-const socket = io("https://blablaland-server.onrender.com"); // Change ça par ton url serveur si besoin
+const socket = io();
 
-let player = {
-    pseudo: "Non connecté",
-    argent: 0,
-    level: 1,
-    x: 400,
-    y: 120,
-    velocityX: 0,
-    velocityY: 0,
-    onGround: false,
+// PRELOAD Images
+const images = {};
+const imageSources = {
+    map1: "https://i.imgur.com/VYOacW2.png",
+    map2: "https://i.imgur.com/uIQqqHn.png",
+    idle: "https://i.imgur.com/jKbjaOa.png",
+    walk1: "https://i.imgur.com/ioZGV8S.png",
+    walk2: "https://i.imgur.com/IXTOJpw.png",
+    diamond: "https://i.imgur.com/fnuCYnE.png",
+    diamondBroken: "https://i.imgur.com/IVY4vuE.png"
 };
 
-let keys = {};
-let players = {};
-let gravity = 0.5;
-let friction = 0.8;
-let jumpPower = -10;
+let loadedImages = 0;
+const totalImages = Object.keys(imageSources).length;
 
-// Canvas setup
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-
-const mapImage = new Image();
-mapImage.src = "https://i.imgur.com/VYOacW2.png";
-
-const playerIdle = new Image();
-playerIdle.src = "https://i.imgur.com/jKbjaOa.png";
-const playerWalk1 = new Image();
-playerWalk1.src = "https://i.imgur.com/ioZGV8S.png";
-const playerWalk2 = new Image();
-playerWalk2.src = "https://i.imgur.com/IXTOJpw.png";
-
-let currentFrame = 0;
-let frameTimer = 0;
-
-// Input
-document.addEventListener("keydown", (e) => keys[e.key] = true);
-document.addEventListener("keyup", (e) => keys[e.key] = false);
-
-// Timer pour le lvl up
-setInterval(() => {
-    player.level++;
-    updateInfo();
-}, 10000);
-
-// Chat
-function sendMessage() {
-    const input = document.getElementById("chatInput");
-    if (input.value.trim() !== "") {
-        socket.emit("chatMessage", { pseudo: player.pseudo, message: input.value });
-        input.value = "";
-    }
+for (const key in imageSources) {
+    images[key] = new Image();
+    images[key].src = imageSources[key];
+    images[key].onload = () => {
+        loadedImages++;
+        if (loadedImages === totalImages) startGame();
+    };
 }
 
-socket.on("chatMessage", (data) => {
-    const chat = document.getElementById("chatMessages");
-    const message = document.createElement("div");
-    message.textContent = `${data.pseudo}: ${data.message}`;
-    chat.appendChild(message);
-    chat.scrollTop = chat.scrollHeight;
-});
+function startGame() {
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
 
-// Connexion / Inscription
-function showForm(type) {
-    const form = document.getElementById("formContainer");
-    form.style.display = "block";
-    document.getElementById("formTitle").innerText = type;
-}
+    const maps = [images.map1, images.map2];
+    let currentMap = 0;
 
-function hideForm() {
-    document.getElementById("formContainer").style.display = "none";
-}
+    const player = {
+        x: canvas.width / 2,
+        y: 120,
+        size: 45,
+        velocityX: 0,
+        velocityY: 0,
+        facing: "right",
+        walking: false,
+        frameTimer: 0,
+        frameIndex: 0,
+        onGround: false,
+        pseudo: localStorage.getItem("pseudo") || "Non connecté",
+        money: 0,
+        level: 1
+    };
 
-async function submitForm() {
-    const username = document.getElementById("formUsername").value;
-    const password = document.getElementById("formPassword").value;
-    const type = document.getElementById("formTitle").innerText;
+    const players = {};
+    const gravity = 0.5;
+    const friction = 0.8;
+    const jumpPower = -10;
+    const keys = {};
+    
+    let platforms = [{ x: 0, y: 380, width: canvas.width, height: canvas.height - 380 }];
+    let diamonds = [{ x: Math.random() * canvas.width, y: 380, collected: false }];
 
-    const endpoint = type === "Connexion" ? "/api/login" : "/api/register";
-    try {
-        const res = await fetch(`https://blablaland-server.onrender.com${endpoint}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, password }),
+    document.addEventListener("keydown", e => keys[e.key] = true);
+    document.addEventListener("keyup", e => keys[e.key] = false);
+
+    setInterval(() => {
+        diamonds.forEach(d => {
+            if (d.collected) {
+                d.x = Math.random() * canvas.width;
+                d.collected = false;
+            }
+        });
+    }, 5000);
+
+    setInterval(() => {
+        player.level++;
+    }, 10000);
+
+    socket.emit("newPlayer", player.pseudo);
+
+    socket.on("players", (serverPlayers) => {
+        Object.assign(players, serverPlayers);
+    });
+
+    function update() {
+        if (keys["ArrowLeft"]) player.velocityX = -5;
+        else if (keys["ArrowRight"]) player.velocityX = 5;
+        else player.velocityX *= friction;
+
+        if (keys["ArrowUp"] && player.onGround) {
+            player.velocityY = jumpPower;
+            player.onGround = false;
+        }
+
+        player.x += player.velocityX;
+        player.y += player.velocityY;
+        player.velocityY += gravity;
+        player.walking = Math.abs(player.velocityX) > 1;
+
+        if (player.velocityX < 0) player.facing = "left";
+        if (player.velocityX > 0) player.facing = "right";
+
+        platforms.forEach(p => {
+            if (player.x + player.size > p.x && player.x - player.size < p.x + p.width && player.y + player.size > p.y && player.y + player.size < p.y + 10) {
+                player.y = p.y - player.size;
+                player.velocityY = 0;
+                player.onGround = true;
+            }
         });
 
-        if (!res.ok) throw new Error(await res.text());
+        if (player.x + player.size > canvas.width) {
+            currentMap = (currentMap + 1) % maps.length;
+            player.x = 0 + player.size;
+        } else if (player.x - player.size < 0) {
+            currentMap = (currentMap - 1 + maps.length) % maps.length;
+            player.x = canvas.width - player.size;
+        }
 
-        const result = await res.json();
-        player.pseudo = result.username || username;
-        updateInfo();
-        hideForm();
-        socket.emit("newPlayer", player.pseudo);
+        const diamond = diamonds[currentMap];
+        if (!diamond.collected && Math.hypot(player.x - diamond.x, player.y - diamond.y) < 50 && keys["ArrowDown"]) {
+            player.money += Math.floor(Math.random() * 101) + 50;
+            diamond.collected = true;
+        }
 
-    } catch (err) {
-        alert("Erreur: " + err.message);
-    }
-}
+        socket.emit("move", {
+            x: player.x,
+            y: player.y,
+            facing: player.facing,
+            walking: player.walking,
+            pseudo: player.pseudo
+        });
 
-document.getElementById("formSubmit").addEventListener("click", submitForm);
-
-// Inventaire
-const inventory = document.getElementById("inventory");
-for (let i = 0; i < 24; i++) {
-    const slot = document.createElement("div");
-    slot.classList.add("inventory-slot");
-    inventory.appendChild(slot);
-}
-
-// Update interface info
-function updateInfo() {
-    document.getElementById("playerPseudo").textContent = player.pseudo;
-    document.getElementById("playerMoney").textContent = player.argent;
-    document.getElementById("playerLevel").textContent = player.level;
-    document.getElementById("money").textContent = player.argent;
-}
-
-// Receive players
-socket.on("players", (serverPlayers) => {
-    players = serverPlayers;
-});
-
-// Game loop
-function update() {
-    player.velocityY += gravity;
-    player.onGround = false;
-
-    if (keys["ArrowLeft"]) {
-        player.velocityX = -5;
-        player.facing = "left";
-    } else if (keys["ArrowRight"]) {
-        player.velocityX = 5;
-        player.facing = "right";
+        document.getElementById("money").textContent = player.money;
+        document.getElementById("playerMoney").textContent = player.money;
+        document.getElementById("playerLevel").textContent = player.level;
+        document.getElementById("playerPseudo").textContent = player.pseudo;
     }
 
-    if (keys["ArrowUp"] && player.onGround) {
-        player.velocityY = jumpPower;
-    }
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(maps[currentMap], 0, 0, canvas.width, canvas.height);
 
-    player.x += player.velocityX;
-    player.y += player.velocityY;
-    player.velocityX *= friction;
+        for (let id in players) {
+            const p = players[id];
+            const img = (!p.walking) ? images.idle : (p.frameIndex % 2 === 0) ? images.walk1 : images.walk2;
 
-    if (player.y >= 380) {
-        player.y = 380;
-        player.velocityY = 0;
-        player.onGround = true;
-    }
-
-    frameTimer++;
-    if (frameTimer > 10) {
-        currentFrame = (currentFrame + 1) % 2;
-        frameTimer = 0;
-    }
-
-    socket.emit("move", { x: player.x, y: player.y });
-    updateInfo();
-}
-
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(mapImage, 0, 0, canvas.width, canvas.height);
-
-    for (let id in players) {
-        const p = players[id];
-        let sprite = playerIdle;
-
-        if (p.x !== undefined && p.y !== undefined) {
-            if (p.x !== 0) sprite = currentFrame === 0 ? playerWalk1 : playerWalk2;
             ctx.save();
             ctx.translate(p.x, p.y);
             if (p.facing === "left") ctx.scale(-1, 1);
-            ctx.drawImage(sprite, -45, -65, 90, 90);
+            ctx.drawImage(img, p.facing === "left" ? -45 : -45, -65, 90, 90);
             ctx.restore();
+
             ctx.fillStyle = "black";
-            ctx.font = "18px Arial";
+            ctx.font = "20px Arial";
             ctx.textAlign = "center";
             ctx.fillText(p.pseudo, p.x, p.y - 75);
         }
+
+        const diamond = diamonds[currentMap];
+        if (!diamond.collected) ctx.drawImage(images.diamond, diamond.x - 30, diamond.y - 60, 60, 60);
+        else ctx.drawImage(images.diamondBroken, diamond.x - 30, diamond.y - 60, 60, 60);
     }
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    loop();
 }
 
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
-}
-
-gameLoop();
