@@ -1,172 +1,68 @@
-// CLIENT.JS FINAL PROPRE
-
-const socket = io("https://blablaland-server.onrender.com");
+// Configuration de la connexion socket.io
+const socket = io("https://blablaland-server.onrender.com"); // Change ça par ton url serveur si besoin
 
 let player = {
-    x: 400,
-    y: 100,
-    size: 45,
-    money: 0,
     pseudo: "Non connecté",
-    level: 1
+    argent: 0,
+    level: 1,
+    x: 400,
+    y: 120,
+    velocityX: 0,
+    velocityY: 0,
+    onGround: false,
 };
 
-let players = {};
 let keys = {};
-let currentMap = 0;
+let players = {};
+let gravity = 0.5;
+let friction = 0.8;
+let jumpPower = -10;
 
-const maps = [
-    "https://i.imgur.com/VYOacW2.png",
-    "https://i.imgur.com/uIQqqHn.png"
-];
-
-const mapImage = new Image();
-mapImage.src = maps[currentMap];
-
-const diamondImage = new Image();
-diamondImage.src = "https://i.imgur.com/fnuCYnE.png";
-
-const brokenDiamondImage = new Image();
-brokenDiamondImage.src = "https://i.imgur.com/IVY4vuE.png";
-
-const playerIdle = new Image();
-playerIdle.src = "https://i.imgur.com/jKbjaOa.png";
-
-const playerWalk1 = new Image();
-playerWalk1.src = "https://i.imgur.com/ioZGV8S.png";
-
-const playerWalk2 = new Image();
-playerWalk2.src = "https://i.imgur.com/IXTOJpw.png";
-
-let diamonds = [
-    { x: Math.random() * 960, y: 380, collected: false },
-    { x: Math.random() * 960, y: 380, collected: false }
-];
-
+// Canvas setup
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
+const mapImage = new Image();
+mapImage.src = "https://i.imgur.com/VYOacW2.png";
 
-setInterval(() => {
-    diamonds.forEach(diamond => {
-        if (diamond.collected) {
-            diamond.x = Math.random() * 960;
-            diamond.collected = false;
-        }
-    });
-}, 5000);
+const playerIdle = new Image();
+playerIdle.src = "https://i.imgur.com/jKbjaOa.png";
+const playerWalk1 = new Image();
+playerWalk1.src = "https://i.imgur.com/ioZGV8S.png";
+const playerWalk2 = new Image();
+playerWalk2.src = "https://i.imgur.com/IXTOJpw.png";
 
+let currentFrame = 0;
+let frameTimer = 0;
+
+// Input
+document.addEventListener("keydown", (e) => keys[e.key] = true);
+document.addEventListener("keyup", (e) => keys[e.key] = false);
+
+// Timer pour le lvl up
 setInterval(() => {
     player.level++;
+    updateInfo();
 }, 10000);
 
-socket.on('players', (data) => {
-    players = data;
-});
-
-function sendMove() {
-    socket.emit("move", { x: player.x, y: player.y });
-}
-
-function update() {
-    if (keys["ArrowLeft"]) player.x -= 5;
-    if (keys["ArrowRight"]) player.x += 5;
-    if (keys["ArrowUp"]) player.y -= 5;
-    if (keys["ArrowDown"]) player.y += 5;
-
-    if (player.x + player.size > canvas.width) {
-        currentMap = (currentMap + 1) % maps.length;
-        mapImage.src = maps[currentMap];
-        player.x = 0 + player.size;
-    }
-
-    if (player.x - player.size < 0) {
-        currentMap = (currentMap - 1 + maps.length) % maps.length;
-        mapImage.src = maps[currentMap];
-        player.x = canvas.width - player.size;
-    }
-
-    diamonds.forEach(diamond => {
-        let dist = Math.hypot(player.x - diamond.x, player.y - diamond.y);
-        if (dist < 50 && !diamond.collected) {
-            player.money += Math.floor(Math.random() * 101) + 50;
-            diamond.collected = true;
-        }
-    });
-
-    document.getElementById("money").textContent = player.money;
-    document.getElementById("playerMoney").textContent = player.money;
-    document.getElementById("playerLevel").textContent = player.level;
-
-    sendMove();
-}
-
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(mapImage, 0, 0, canvas.width, canvas.height);
-
-    for (let id in players) {
-        const p = players[id];
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.drawImage(playerIdle, -45, -65, 90, 90);
-        ctx.restore();
-        ctx.fillStyle = "black";
-        ctx.font = "16px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(p.pseudo, p.x, p.y - 75);
-    }
-
-    let sprite = playerIdle;
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.drawImage(sprite, -45, -65, 90, 90);
-    ctx.restore();
-
-    ctx.fillStyle = "black";
-    ctx.font = "20px Arial";
-    ctx.fillText(player.pseudo, player.x, player.y - 75);
-
-    diamonds.forEach(diamond => {
-        if (!diamond.collected) ctx.drawImage(diamondImage, diamond.x, diamond.y - 60, 60, 60);
-        else ctx.drawImage(brokenDiamondImage, diamond.x, diamond.y - 60, 60, 60);
-    });
-}
-
-function loop() {
-    update();
-    draw();
-    requestAnimationFrame(loop);
-}
-
-loop();
-
+// Chat
 function sendMessage() {
     const input = document.getElementById("chatInput");
-    const messages = document.getElementById("chatMessages");
-
     if (input.value.trim() !== "") {
-        const msg = document.createElement("div");
-        msg.textContent = player.pseudo + ": " + input.value;
-        messages.appendChild(msg);
-        messages.scrollTop = messages.scrollHeight;
+        socket.emit("chatMessage", { pseudo: player.pseudo, message: input.value });
         input.value = "";
     }
 }
 
-const inventory = document.getElementById("inventory");
-for (let i = 0; i < 24; i++) {
-    const slot = document.createElement("div");
-    slot.classList.add("inventory-slot");
-    inventory.appendChild(slot);
-}
+socket.on("chatMessage", (data) => {
+    const chat = document.getElementById("chatMessages");
+    const message = document.createElement("div");
+    message.textContent = `${data.pseudo}: ${data.message}`;
+    chat.appendChild(message);
+    chat.scrollTop = chat.scrollHeight;
+});
 
-// ---------------------------
 // Connexion / Inscription
-// ---------------------------
-
 function showForm(type) {
     const form = document.getElementById("formContainer");
     form.style.display = "block";
@@ -177,38 +73,119 @@ function hideForm() {
     document.getElementById("formContainer").style.display = "none";
 }
 
-document.querySelector("#formContainer button").addEventListener("click", hideForm);
-
-document.querySelectorAll(".topButtonImg").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-        const type = e.target.getAttribute("data-type");
-        showForm(type);
-    });
-});
-
-document.getElementById("formContainer").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const username = document.querySelector("#formContainer input[type=text]").value;
-    const password = document.querySelector("#formContainer input[type=password]").value;
+async function submitForm() {
+    const username = document.getElementById("formUsername").value;
+    const password = document.getElementById("formPassword").value;
     const type = document.getElementById("formTitle").innerText;
 
-    if (!username || !password) return;
+    const endpoint = type === "Connexion" ? "/api/login" : "/api/register";
+    try {
+        const res = await fetch(`https://blablaland-server.onrender.com${endpoint}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
+        });
 
-    const url = type === "Connexion" ? "/login" : "/register";
+        if (!res.ok) throw new Error(await res.text());
 
-    const res = await fetch("https://blablaland-server.onrender.com" + url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-    });
-
-    if (res.ok) {
         const result = await res.json();
         player.pseudo = result.username || username;
-        document.getElementById("playerPseudo").textContent = player.pseudo;
+        updateInfo();
         hideForm();
         socket.emit("newPlayer", player.pseudo);
-    } else {
-        alert("Erreur: " + (await res.text()));
+
+    } catch (err) {
+        alert("Erreur: " + err.message);
     }
+}
+
+document.getElementById("formSubmit").addEventListener("click", submitForm);
+
+// Inventaire
+const inventory = document.getElementById("inventory");
+for (let i = 0; i < 24; i++) {
+    const slot = document.createElement("div");
+    slot.classList.add("inventory-slot");
+    inventory.appendChild(slot);
+}
+
+// Update interface info
+function updateInfo() {
+    document.getElementById("playerPseudo").textContent = player.pseudo;
+    document.getElementById("playerMoney").textContent = player.argent;
+    document.getElementById("playerLevel").textContent = player.level;
+    document.getElementById("money").textContent = player.argent;
+}
+
+// Receive players
+socket.on("players", (serverPlayers) => {
+    players = serverPlayers;
 });
+
+// Game loop
+function update() {
+    player.velocityY += gravity;
+    player.onGround = false;
+
+    if (keys["ArrowLeft"]) {
+        player.velocityX = -5;
+        player.facing = "left";
+    } else if (keys["ArrowRight"]) {
+        player.velocityX = 5;
+        player.facing = "right";
+    }
+
+    if (keys["ArrowUp"] && player.onGround) {
+        player.velocityY = jumpPower;
+    }
+
+    player.x += player.velocityX;
+    player.y += player.velocityY;
+    player.velocityX *= friction;
+
+    if (player.y >= 380) {
+        player.y = 380;
+        player.velocityY = 0;
+        player.onGround = true;
+    }
+
+    frameTimer++;
+    if (frameTimer > 10) {
+        currentFrame = (currentFrame + 1) % 2;
+        frameTimer = 0;
+    }
+
+    socket.emit("move", { x: player.x, y: player.y });
+    updateInfo();
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(mapImage, 0, 0, canvas.width, canvas.height);
+
+    for (let id in players) {
+        const p = players[id];
+        let sprite = playerIdle;
+
+        if (p.x !== undefined && p.y !== undefined) {
+            if (p.x !== 0) sprite = currentFrame === 0 ? playerWalk1 : playerWalk2;
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            if (p.facing === "left") ctx.scale(-1, 1);
+            ctx.drawImage(sprite, -45, -65, 90, 90);
+            ctx.restore();
+            ctx.fillStyle = "black";
+            ctx.font = "18px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(p.pseudo, p.x, p.y - 75);
+        }
+    }
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();

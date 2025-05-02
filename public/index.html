@@ -35,10 +35,11 @@
             padding: 20px;
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            text-align: center;
         }
         #formContainer input {
             display: block;
-            margin: 10px 0;
+            margin: 10px auto;
             padding: 5px;
             width: 200px;
         }
@@ -114,18 +115,16 @@
 <body>
 
 <div id="topbar">
-    <img src="https://i.imgur.com/P8ChU6A.png" class="topButtonImg" data-type="Connexion">
-    <img src="https://i.imgur.com/i0AGXLh.png" class="topButtonImg" data-type="Inscription">
+    <img src="https://i.imgur.com/P8ChU6A.png" class="topButtonImg" data-type="Connexion" onclick="showForm('Connexion')">
+    <img src="https://i.imgur.com/i0AGXLh.png" class="topButtonImg" data-type="Inscription" onclick="showForm('Inscription')">
 </div>
 
 <div id="formContainer">
     <h3 id="formTitle">Connexion</h3>
-    <form>
-        <input type="text" placeholder="Pseudo">
-        <input type="password" placeholder="Mot de passe">
-        <button type="submit">Valider</button>
-        <button type="button" onclick="hideForm()">Fermer</button>
-    </form>
+    <input type="text" id="formUsername" placeholder="Pseudo">
+    <input type="password" id="formPassword" placeholder="Mot de passe">
+    <button id="formSubmit">Valider</button>
+    <button onclick="hideForm()">Fermer</button>
 </div>
 
 <div id="container">
@@ -154,7 +153,7 @@
     </div>
 </div>
 
-<!-- Socket.io -->
+<!-- SOCKET.IO + CLIENT.JS -->
 <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
 <script src="client.js"></script>
 </body>
